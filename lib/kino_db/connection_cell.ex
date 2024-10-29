@@ -281,7 +281,13 @@ defmodule KinoDB.ConnectionCell do
 
   defp to_quoted(%{"type" => "postgres"} = attrs) do
     quote do
-      opts = unquote(trim_opts(shared_options(attrs) ++ postgres_and_mysql_options(attrs)))
+      opts =
+        unquote(
+          trim_opts(
+            shared_options(attrs) ++
+              [password: quoted_pass(attrs)] ++ postgres_and_mysql_options(attrs)
+          )
+        )
 
       {:ok, unquote(quoted_var(attrs["variable"]))} = Kino.start_child({Postgrex, opts})
     end
@@ -289,7 +295,13 @@ defmodule KinoDB.ConnectionCell do
 
   defp to_quoted(%{"type" => "mysql"} = attrs) do
     quote do
-      opts = unquote(trim_opts(shared_options(attrs) ++ postgres_and_mysql_options(attrs)))
+      opts =
+        unquote(
+          trim_opts(
+            shared_options(attrs) ++
+              [password: quoted_pass(attrs)] ++ postgres_and_mysql_options(attrs)
+          )
+        )
 
       {:ok, unquote(quoted_var(attrs["variable"]))} = Kino.start_child({MyXQL, opts})
     end
@@ -345,7 +357,12 @@ defmodule KinoDB.ConnectionCell do
 
   defp to_quoted(%{"type" => "clickhouse"} = attrs) do
     quote do
-      opts = unquote(trim_opts(shared_options(attrs) ++ clickhouse_options(attrs)))
+      opts =
+        unquote(
+          trim_opts(
+            shared_options(attrs) ++ [password: quoted_pass(attrs)] ++ clickhouse_options(attrs)
+          )
+        )
 
       {:ok, unquote(quoted_var(attrs["variable"]))} = Kino.start_child({Ch, opts})
     end
@@ -397,7 +414,6 @@ defmodule KinoDB.ConnectionCell do
       hostname: attrs["hostname"],
       port: attrs["port"],
       username: attrs["username"],
-      password: quoted_pass(attrs),
       database: attrs["database"]
     ]
 
@@ -426,18 +442,27 @@ defmodule KinoDB.ConnectionCell do
   end
 
   defp sqlserver_options(attrs) do
-    opts =
+    auth_opts =
+      cond do
+        attrs["authentication"] == "entra_id" ->
+          [authentication: "Active Directory Default"]
+
+        true ->
+          [password: quoted_pass(attrs)]
+      end
+
+    ssl_opts =
       if attrs["use_ssl"] do
         cacertfile = attrs["cacertfile"]
 
-        ssl_opts =
+        cert_opts =
           if cacertfile && cacertfile != "" do
             [cacertfile: cacertfile]
           else
             [cacerts: quote(do: :public_key.cacerts_get())]
           end
 
-        [ssl: true, ssl_opts: ssl_opts]
+        [ssl: true, ssl_opts: cert_opts]
       else
         []
       end
@@ -445,9 +470,9 @@ defmodule KinoDB.ConnectionCell do
     instance = attrs["instance"]
 
     if instance && instance != "" do
-      opts ++ [instance: instance]
+      auth_opts ++ ssl_opts ++ [instance: instance]
     else
-      opts
+      auth_opts ++ ssl_opts
     end
   end
 

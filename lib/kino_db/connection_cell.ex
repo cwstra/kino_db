@@ -443,12 +443,10 @@ defmodule KinoDB.ConnectionCell do
 
   defp sqlserver_options(attrs) do
     auth_opts =
-      cond do
-        attrs["authentication"] == "entra_id" ->
-          [authentication: "Active Directory Default"]
-
-        true ->
-          [password: quoted_pass(attrs)]
+      if attrs["authentication"] == "password" do
+        [password: quoted_pass(attrs)]
+      else
+        [authentication: attrs["authentication"]]
       end
 
     ssl_opts =

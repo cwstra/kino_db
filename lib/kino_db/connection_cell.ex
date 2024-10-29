@@ -45,7 +45,8 @@ defmodule KinoDB.ConnectionCell do
       "output_location" => attrs["output_location"] || "",
       "account" => attrs["account"] || "",
       "schema" => attrs["schema"] || "",
-      "instance" => attrs["instance"] || ""
+      "instance" => attrs["instance"] || "",
+      "authentication" => attrs["authentication"] || "password"
     }
 
     ctx =
@@ -143,11 +144,18 @@ defmodule KinoDB.ConnectionCell do
             else: ~w|database schema account username password|
 
         "sqlserver" ->
-          if fields["use_password_secret"],
-            do:
-              ~w|database hostname port use_ipv6 username password_secret use_ssl cacertfile instance|,
-            else:
-              ~w|database hostname port use_ipv6 username password use_ssl cacertfile instance|
+          shared_keys = ~w|database hostname port use_ipv6 username use_ssl cacertfile instance|
+
+          cond do
+            fields["authentication"] == "entra_id" ->
+              shared_keys
+
+            fields["use_password_secret"] ->
+              shared_keys ++ ~w|password_secret|
+
+            true ->
+              shared_keys ++ ~w|password|
+          end
 
         "clickhouse" ->
           ~w|scheme username password_secret hostname port database|
@@ -158,7 +166,13 @@ defmodule KinoDB.ConnectionCell do
             else: ~w|database hostname port use_ipv6 use_ssl cacertfile username password|
       end
 
-    Map.take(fields, @default_keys ++ connection_keys)
+    provided_values = Map.take(fields, @default_keys ++ connection_keys)
+
+    if fields["type"] == "sqlserver" && fields["authentication"] == "entra_id" do
+      Map.put(provided_values, :authentication, "Active Directory Default")
+    else
+      provided_values
+    end
   end
 
   @impl true
